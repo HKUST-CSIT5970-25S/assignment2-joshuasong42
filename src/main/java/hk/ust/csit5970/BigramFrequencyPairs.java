@@ -2,6 +2,7 @@ package hk.ust.csit5970;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Iterator;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -43,6 +44,7 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 		// Reuse objects to save overhead of object creation.
 		private static final IntWritable ONE = new IntWritable(1);
 		private static final PairOfStrings BIGRAM = new PairOfStrings();
+		private static final PairOfStrings UNIGRAM = new PairOfStrings();
 
 		@Override
 		public void map(LongWritable key, Text value, Context context)
@@ -53,6 +55,18 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			if (words.length > 1){
+				for (int i = 0; i < words.length; i++) {
+	
+					// Emit bigram if not the last word
+					if (i < words.length - 1 && words[i+1].length() != 0) {
+						UNIGRAM.set(words[i], "");
+						context.write(UNIGRAM, ONE);
+						BIGRAM.set(words[i], words[i+1]);
+						context.write(BIGRAM, ONE);
+					}
+				}
+			}
 		}
 	}
 
@@ -64,6 +78,7 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 
 		// Reuse objects.
 		private final static FloatWritable VALUE = new FloatWritable();
+		private float marginal = 0;
 
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
@@ -71,7 +86,28 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			if (key.getRightElement().isEmpty()) {
+                // This is a unigram count (marginal)
+                marginal = 0;
+                for (IntWritable value : values) {
+                    marginal += value.get();
+                }
+				VALUE.set(marginal);
+				context.write(key, VALUE);
+            } else {
+                // This is a bigram count
+                int sum = 0;
+                for (IntWritable value : values) {
+                    sum += value.get();
+                }
+                // Calculate relative frequency
+                float relativeFrequency = sum / marginal;
+                VALUE.set(relativeFrequency);
+                context.write(key, VALUE);
+            }
+
 		}
+
 	}
 	
 	private static class MyCombiner extends
@@ -84,6 +120,13 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			Iterator<IntWritable> iter = values.iterator();
+			int sum = 0;
+			while (iter.hasNext()) {
+				sum += iter.next().get();
+			}
+			SUM.set(sum);
+			context.write(key, SUM);
 		}
 	}
 
